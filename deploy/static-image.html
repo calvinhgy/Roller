@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>静态图像测试</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+      flex-direction: column;
+    }
+    .container {
+      text-align: center;
+    }
+    .ball {
+      width: 100px;
+      height: 100px;
+      background-color: red;
+      border-radius: 50%;
+      margin: 20px auto;
+    }
+    .floor {
+      width: 300px;
+      height: 20px;
+      background-color: green;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>这是一个静态的红色小球</h1>
+    <div class="ball"></div>
+    <div class="floor"></div>
+    <p>如果您能看到上面的红色圆形和绿色长条，说明您的浏览器可以正常显示基本图形。</p>
+    <p>当前时间: <span id="time"></span></p>
+  </div>
+
+  <script>
+    // 显示当前时间
+    function updateTime() {
+      document.getElementById('time').textContent = new Date().toLocaleTimeString();
+    }
+    
+    // 每秒更新一次时间
+    setInterval(updateTime, 1000);
+    updateTime();
+  </script>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roller 简化版</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #game-container {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+    }
+    #ui-container {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+    }
+    button {
+      padding: 8px 16px;
+      margin: 5px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #loading {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      z-index: 1000;
+    }
+    .spinner {
+      border: 4px solid rgba(255,255,255,0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #debug-info {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0,0,0,0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>加载中...</div>
+  </div>
+  
+  <div id="game-container"></div>
+  
+  <div id="ui-container">
+    <button id="reset-btn">重置</button>
+    <button id="calibrate-btn">校准</button>
+  </div>
+  
+  <div id="debug-info"></div>
+
+  <!-- 先加载Three.js库 -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+  
+  <script>
+    // 调试信息更新
+    function updateDebugInfo() {
+      const debugInfo = document.getElementById('debug-info');
+      if (!debugInfo) return;
+      
+      const cameraInfo = window.gameState && window.gameState.camera ? 
+        `位置: (${gameState.camera.position.x.toFixed(2)}, ${gameState.camera.position.y.toFixed(2)}, ${gameState.camera.position.z.toFixed(2)})` : 
+        '未创建';
+      
+      const ballInfo = window.gameState && window.gameState.ball ? 
+        `位置: (${gameState.ball.position.x.toFixed(2)}, ${gameState.ball.position.y.toFixed(2)}, ${gameState.ball.position.z.toFixed(2)})` : 
+        '未创建';
+      
+      const orientationInfo = window.gameState && window.gameState.deviceOrientation ? 
+        `Beta: ${gameState.deviceOrientation.beta.toFixed(2)}, Gamma: ${gameState.deviceOrientation.gamma.toFixed(2)}` : 
+        '未获取';
+      
+      debugInfo.innerHTML = `
+        <div><strong>调试信息</strong></div>
+        <div>时间: ${new Date().toLocaleTimeString()}</div>
+        <div>Three.js: ${typeof THREE !== 'undefined' ? '已加载' : '未加载'}</div>
+        <div>场景: ${window.gameState && window.gameState.scene ? '已创建' : '未创建'}</div>
+        <div>相机: ${cameraInfo}</div>
+        <div>小球: ${ballInfo}</div>
+        <div>方向: ${orientationInfo}</div>
+        <div>游戏状态: ${window.gameState && window.gameState.running ? '运行中' : '未运行'}</div>
+      `;
+    }
+    
+    // 每秒更新调试信息
+    setInterval(updateDebugInfo, 1000);
+    
+    // 游戏状态 - 全局变量以便调试
+    window.gameState = {
+      running: false,
+      scene: null,
+      camera: null,
+      renderer: null,
+      ball: null,
+      floor: null,
+      lastTime: 0,
+      deviceOrientation: { beta: 0, gamma: 0 }
+    };
+    
+    // 简单版本，直接内联所有代码
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('页面已加载');
+      
+      // 检查Three.js是否加载
+      if (typeof THREE === 'undefined') {
+        console.error('Three.js未加载');
+        document.getElementById('debug-info').innerHTML = '<div style="color:red">错误: Three.js未加载</div>';
+        return;
+      }
+      
+      // 在短暂延迟后隐藏加载屏幕
+      setTimeout(() => {
+        const loading = document.getElementById('loading');
+        if (loading) {
+          loading.style.display = 'none';
+        }
+        
+        // 初始化游戏
+        initGame();
+      }, 1000);
+      
+      // 按钮事件
+      document.getElementById('reset-btn').addEventListener('click', resetGame);
+      document.getElementById('calibrate-btn').addEventListener('click', calibrateControls);
+    });
+    
+    // 初始化游戏
+    function initGame() {
+      console.log('初始化游戏');
+      
+      try {
+        // 创建Three.js场景
+        gameState.scene = new THREE.Scene();
+        gameState.scene.background = new THREE.Color(0x87CEEB);
+        
+        // 创建相机
+        gameState.camera = new THREE.PerspectiveCamera(
+          75, 
+          window.innerWidth / window.innerHeight, 
+          0.1, 
+          1000
+        );
+        gameState.camera.position.set(0, 10, 10);
+        gameState.camera.lookAt(0, 0, 0);
+        
+        // 创建渲染器
+        gameState.renderer = new THREE.WebGLRenderer({ antialias: true });
+        gameState.renderer.setSize(window.innerWidth, window.innerHeight);
+        gameState.renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('game-container').appendChild(gameState.renderer.domElement);
+        
+        // 添加灯光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        gameState.scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 20, 10);
+        gameState.scene.add(directionalLight);
+        
+        // 创建地板
+        const floorGeometry = new THREE.PlaneGeometry(20, 20);
+        const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x4CAF50 });
+        gameState.floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        gameState.floor.rotation.x = -Math.PI / 2;
+        gameState.scene.add(gameState.floor);
+        
+        // 创建小球 - 使用更明显的颜色和大小
+        const ballGeometry = new THREE.SphereGeometry(1, 32, 32); // 增大小球尺寸
+        const ballMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 }); // 使用红色
+        gameState.ball = new THREE.Mesh(ballGeometry, ballMaterial);
+        gameState.ball.position.set(0, 1, 0); // 提高小球位置，使其更明显
+        gameState.scene.add(gameState.ball); // 确保添加到场景
+        
+        console.log('小球已创建:', gameState.ball);
+        
+        // 设置窗口大小调整事件
+        window.addEventListener('resize', onWindowResize);
+        
+        // 设置设备方向事件
+        window.addEventListener('deviceorientation', handleDeviceOrientation);
+        
+        // 请求设备方向权限
+        requestDeviceOrientationPermission();
+        
+        // 开始游戏循环
+        gameState.running = true;
+        gameState.lastTime = performance.now();
+        gameLoop();
+        
+        // 立即更新调试信息
+        updateDebugInfo();
+        
+      } catch (error) {
+        console.error('游戏初始化错误:', error);
+        document.getElementById('debug-info').innerHTML = `<div style="color:red">初始化错误: ${error.message}</div>`;
+      }
+    }
+    
+    // 请求设备方向权限
+    async function requestDeviceOrientationPermission() {
+      if (typeof DeviceOrientationEvent !== 'undefined' && 
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+          const permissionState = await DeviceOrientationEvent.requestPermission();
+          if (permissionState === 'granted') {
+            console.log('设备方向权限已授予');
+          } else {
+            console.log('设备方向权限被拒绝');
+          }
+        } catch (error) {
+          console.error('请求设备方向权限失败:', error);
+        }
+      } else {
+        console.log('此设备不需要请求方向权限');
+      }
+    }
+    
+    // 处理设备方向变化
+    function handleDeviceOrientation(event) {
+      if (!gameState.running) return;
+      
+      // 获取设备方向数据
+      gameState.deviceOrientation = {
+        beta: event.beta || 0,  // 前后倾斜
+        gamma: event.gamma || 0 // 左右倾斜
+      };
+    }
+    
+    // 游戏循环
+    function gameLoop(timestamp) {
+      if (!gameState.running) return;
+      
+      // 更新游戏状态
+      updateGame(timestamp);
+      
+      // 渲染场景
+      if (gameState.renderer && gameState.scene && gameState.camera) {
+        gameState.renderer.render(gameState.scene, gameState.camera);
+      }
+      
+      // 继续循环
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // 更新游戏状态
+    function updateGame(timestamp) {
+      // 计算帧间隔时间
+      const deltaTime = timestamp - gameState.lastTime;
+      gameState.lastTime = timestamp;
+      
+      // 根据设备倾斜角度移动小球
+      if (gameState.ball) {
+        // 将角度转换为速度
+        const speedX = gameState.deviceOrientation.gamma * 0.01;
+        const speedZ = gameState.deviceOrientation.beta * 0.01;
+        
+        // 更新小球位置
+        gameState.ball.position.x += speedX;
+        gameState.ball.position.z += speedZ;
+        
+        // 限制小球在地板范围内
+        gameState.ball.position.x = Math.max(-9.5, Math.min(9.5, gameState.ball.position.x));
+        gameState.ball.position.z = Math.max(-9.5, Math.min(9.5, gameState.ball.position.z));
+      }
+    }
+    
+    // 窗口大小调整
+    function onWindowResize() {
+      if (gameState.camera && gameState.renderer) {
+        gameState.camera.aspect = window.innerWidth / window.innerHeight;
+        gameState.camera.updateProjectionMatrix();
+        gameState.renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    }
+    
+    // 重置游戏
+    function resetGame() {
+      if (gameState.ball) {
+        gameState.ball.position.set(0, 1, 0);
+      }
+    }
+    
+    // 校准控制
+    function calibrateControls() {
+      gameState.deviceOrientation = { beta: 0, gamma: 0 };
+      alert('控制已校准');
+    }
+  </script>
+</body>
+</html>

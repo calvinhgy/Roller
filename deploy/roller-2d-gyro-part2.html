@@ -1,0 +1,661 @@
+  <script>
+    // 游戏状态
+    const gameState = {
+      running: false,
+      canvas: null,
+      ctx: null,
+      ball: {
+        x: 0,
+        y: 0,
+        radius: 15,
+        color: '#FF0000',
+        velocityX: 0,
+        velocityY: 0
+      },
+      maze: {
+        width: 0,
+        height: 0,
+        cellSize: 0,
+        walls: [],
+        start: { x: 0, y: 0 },
+        goal: { x: 0, y: 0 }
+      },
+      // 陀螺仪和设备方向数据
+      sensors: {
+        gyro: { x: 0, y: 0, z: 0 },
+        orientation: { alpha: 0, beta: 0, gamma: 0 },
+        acceleration: { x: 0, y: 0, z: 0 }
+      },
+      calibration: { beta: 0, gamma: 0 },
+      sensitivity: 0.2,
+      lastTime: 0,
+      elapsedTime: 0,
+      level: 1,
+      maxLevel: 3,
+      permissionGranted: false
+    };
+    
+    // 关卡数据
+    const levels = [
+      // 关卡1 - 简单迷宫
+      {
+        layout: [
+          "###############",
+          "#S#           #",
+          "# # ##### ### #",
+          "# #       #   #",
+          "# ####### # ###",
+          "#       # #   #",
+          "####### # ### #",
+          "#       #     #",
+          "# ########### #",
+          "#             #",
+          "############G##"
+        ],
+        parTime: 30
+      },
+      // 关卡2 - 中等难度
+      {
+        layout: [
+          "###############",
+          "#S            #",
+          "# ########### #",
+          "# #         # #",
+          "# # ####### # #",
+          "# # #     # # #",
+          "# # # ### # # #",
+          "# # # # # # # #",
+          "# #   # #   # #",
+          "#G##### ##### #",
+          "###############"
+        ],
+        parTime: 45
+      },
+      // 关卡3 - 困难迷宫
+      {
+        layout: [
+          "###############",
+          "#S#           #",
+          "# # ######### #",
+          "# #         # #",
+          "# ######### # #",
+          "#         # # #",
+          "# ####### # # #",
+          "# #     # # # #",
+          "# # ### # # # #",
+          "# #   #   # #G#",
+          "###############"
+        ],
+        parTime: 60
+      }
+    ];
+    
+    // 初始化游戏
+    function initGame() {
+      console.log('初始化游戏');
+      
+      // 获取Canvas和上下文
+      gameState.canvas = document.getElementById('game-canvas');
+      gameState.ctx = gameState.canvas.getContext('2d');
+      
+      // 设置Canvas大小
+      resizeCanvas();
+      
+      // 加载关卡
+      loadLevel(gameState.level);
+      
+      // 设置事件监听器
+      window.addEventListener('resize', resizeCanvas);
+      document.getElementById('reset-btn').addEventListener('click', resetBall);
+      document.getElementById('calibrate-btn').addEventListener('click', calibrateOrientation);
+      document.getElementById('next-level-btn').addEventListener('click', nextLevel);
+      document.getElementById('replay-btn').addEventListener('click', replayLevel);
+      
+      // 设置权限请求按钮
+      document.getElementById('request-permission-btn').addEventListener('click', requestMotionPermission);
+      
+      // 检查URL参数，看是否已经授予权限
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('permission') === 'granted') {
+        // 如果URL参数指示已授予权限，则跳过权限请求
+        startGameWithPermission();
+      }
+      
+      // 隐藏加载屏幕
+      document.getElementById('loading').style.display = 'none';
+    }
+    
+    // 请求设备运动权限（包含陀螺仪）
+    async function requestMotionPermission() {
+      const statusElement = document.getElementById('permission-status');
+      statusElement.textContent = '正在请求陀螺仪权限...';
+      
+      try {
+        // 检查是否支持权限API
+        if (typeof DeviceMotionEvent !== 'undefined' && 
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+          
+          // iOS 13+ 需要请求权限
+          const response = await DeviceMotionEvent.requestPermission();
+          
+          if (response === 'granted') {
+            statusElement.textContent = '权限已授予！正在启动游戏...';
+            startGameWithPermission();
+          } else {
+            statusElement.textContent = '权限被拒绝。游戏需要陀螺仪才能正常工作。';
+          }
+        } else {
+          // 其他设备不需要显式请求权限
+          statusElement.textContent = '此设备不需要显式请求权限。正在启动游戏...';
+          startGameWithPermission();
+        }
+      } catch (error) {
+        console.error('请求权限时出错:', error);
+        
+        // 检查是否是HTTPS问题
+        if (window.location.protocol !== 'https:') {
+          statusElement.textContent = '请求权限失败: 陀螺仪传感器需要HTTPS连接。';
+        } else {
+          statusElement.textContent = '请求权限时出错: ' + error.message;
+        }
+      }
+    }
+    
+    // 权限授予后启动游戏
+    function startGameWithPermission() {
+      // 隐藏权限覆盖层
+      document.getElementById('permission-overlay').style.display = 'none';
+      
+      // 设置传感器事件监听器
+      setupSensors();
+      
+      // 开始游戏循环
+      gameState.running = true;
+      gameState.lastTime = performance.now();
+      gameLoop();
+      
+      // 显示通知
+      showNotification('游戏已开始', { type: 'info' });
+    }
+    
+    // 设置传感器
+    function setupSensors() {
+      // 监听设备方向
+      window.addEventListener('deviceorientation', (event) => {
+        gameState.sensors.orientation = {
+          alpha: event.alpha || 0,
+          beta: event.beta || 0,
+          gamma: event.gamma || 0
+        };
+      });
+      
+      // 监听设备运动（包含陀螺仪数据）
+      window.addEventListener('devicemotion', (event) => {
+        // 陀螺仪数据
+        if (event.rotationRate) {
+          gameState.sensors.gyro = {
+            x: event.rotationRate.alpha || 0,
+            y: event.rotationRate.beta || 0,
+            z: event.rotationRate.gamma || 0
+          };
+        }
+        
+        // 加速度数据（包括重力）
+        if (event.accelerationIncludingGravity) {
+          gameState.sensors.acceleration = {
+            x: event.accelerationIncludingGravity.x || 0,
+            y: event.accelerationIncludingGravity.y || 0,
+            z: event.accelerationIncludingGravity.z || 0
+          };
+        }
+      });
+    }
+    
+    // 调整Canvas大小
+    function resizeCanvas() {
+      gameState.canvas.width = window.innerWidth;
+      gameState.canvas.height = window.innerHeight;
+      
+      // 重新计算迷宫尺寸
+      if (gameState.maze.walls.length > 0) {
+        calculateMazeSize();
+      }
+    }
+    
+    // 计算迷宫尺寸和位置
+    function calculateMazeSize() {
+      const level = levels[gameState.level - 1];
+      const rows = level.layout.length;
+      const cols = level.layout[0].length;
+      
+      // 计算单元格大小，使迷宫适合屏幕
+      const maxCellWidth = gameState.canvas.width * 0.9 / cols;
+      const maxCellHeight = gameState.canvas.height * 0.9 / rows;
+      gameState.maze.cellSize = Math.min(maxCellWidth, maxCellHeight);
+      
+      // 计算迷宫总宽高
+      gameState.maze.width = cols * gameState.maze.cellSize;
+      gameState.maze.height = rows * gameState.maze.cellSize;
+      
+      // 更新小球半径
+      gameState.ball.radius = gameState.maze.cellSize * 0.4;
+    }
+    
+    // 加载关卡
+    function loadLevel(levelNum) {
+      if (levelNum < 1 || levelNum > levels.length) {
+        console.error('无效的关卡编号:', levelNum);
+        return;
+      }
+      
+      gameState.level = levelNum;
+      const level = levels[levelNum - 1];
+      
+      // 解析关卡布局
+      gameState.maze.walls = [];
+      
+      const rows = level.layout.length;
+      const cols = level.layout[0].length;
+      
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const cell = level.layout[y][x];
+          
+          if (cell === '#') {
+            // 墙壁
+            gameState.maze.walls.push({ x, y });
+          } else if (cell === 'S') {
+            // 起点
+            gameState.maze.start = { x, y };
+          } else if (cell === 'G') {
+            // 终点
+            gameState.maze.goal = { x, y };
+          }
+        }
+      }
+      
+      // 计算迷宫尺寸
+      calculateMazeSize();
+      
+      // 重置小球位置到起点
+      resetBall();
+      
+      // 重置计时器
+      gameState.elapsedTime = 0;
+      
+      console.log(`关卡 ${levelNum} 已加载`);
+    }
+    
+    // 重置小球位置
+    function resetBall() {
+      // 将小球放在起点中心
+      gameState.ball.x = (gameState.maze.start.x + 0.5) * gameState.maze.cellSize;
+      gameState.ball.y = (gameState.maze.start.y + 0.5) * gameState.maze.cellSize;
+      
+      // 重置速度
+      gameState.ball.velocityX = 0;
+      gameState.ball.velocityY = 0;
+      
+      showNotification('小球已重置', { type: 'info' });
+    }
+    
+    // 校准设备方向
+    function calibrateOrientation() {
+      gameState.calibration = { 
+        beta: gameState.sensors.orientation.beta || 0, 
+        gamma: gameState.sensors.orientation.gamma || 0 
+      };
+      
+      showNotification('方向已校准', { type: 'success' });
+    }
+    
+    // 游戏循环
+    function gameLoop(timestamp) {
+      if (!gameState.running) return;
+      
+      // 计算帧间隔时间
+      const deltaTime = (timestamp - gameState.lastTime) / 1000; // 转换为秒
+      gameState.lastTime = timestamp;
+      
+      // 更新游戏状态
+      update(deltaTime);
+      
+      // 渲染游戏
+      render();
+      
+      // 更新调试信息
+      updateDebugInfo();
+      
+      // 继续循环
+      requestAnimationFrame(gameLoop);
+    }
+    
+    // 更新游戏状态
+    function update(deltaTime) {
+      // 更新计时器
+      gameState.elapsedTime += deltaTime;
+      
+      // 使用陀螺仪和设备方向数据更新小球速度
+      if (gameState.sensors) {
+        // 计算校准后的角度
+        const beta = gameState.sensors.orientation.beta - gameState.calibration.beta;
+        const gamma = gameState.sensors.orientation.gamma - gameState.calibration.gamma;
+        
+        // 将角度转换为加速度
+        const accelerationX = gamma * gameState.sensitivity;
+        const accelerationY = beta * gameState.sensitivity;
+        
+        // 更新速度
+        gameState.ball.velocityX += accelerationX;
+        gameState.ball.velocityY += accelerationY;
+        
+        // 添加阻尼效果
+        gameState.ball.velocityX *= 0.95;
+        gameState.ball.velocityY *= 0.95;
+        
+        // 限制最大速度
+        const maxSpeed = 10;
+        const speed = Math.sqrt(gameState.ball.velocityX * gameState.ball.velocityX + 
+                               gameState.ball.velocityY * gameState.ball.velocityY);
+        
+        if (speed > maxSpeed) {
+          gameState.ball.velocityX = (gameState.ball.velocityX / speed) * maxSpeed;
+          gameState.ball.velocityY = (gameState.ball.velocityY / speed) * maxSpeed;
+        }
+        
+        // 更新位置
+        let newX = gameState.ball.x + gameState.ball.velocityX;
+        let newY = gameState.ball.y + gameState.ball.velocityY;
+        
+        // 检测碰撞
+        if (!checkCollision(newX, newY)) {
+          gameState.ball.x = newX;
+          gameState.ball.y = newY;
+        } else {
+          // 碰撞后反弹
+          gameState.ball.velocityX *= -0.5;
+          gameState.ball.velocityY *= -0.5;
+        }
+        
+        // 检查是否到达终点
+        checkGoal();
+      }
+    }
+    
+    // 检测碰撞
+    function checkCollision(x, y) {
+      // 将像素坐标转换为网格坐标
+      const gridX = Math.floor(x / gameState.maze.cellSize);
+      const gridY = Math.floor(y / gameState.maze.cellSize);
+      
+      // 检查小球是否与墙壁碰撞
+      for (const wall of gameState.maze.walls) {
+        // 简单的矩形碰撞检测
+        if (gridX === wall.x && gridY === wall.y) {
+          return true;
+        }
+        
+        // 更精确的碰撞检测 - 检查小球与墙壁的距离
+        const wallX = wall.x * gameState.maze.cellSize;
+        const wallY = wall.y * gameState.maze.cellSize;
+        const wallSize = gameState.maze.cellSize;
+        
+        // 计算小球与墙壁矩形的最近点
+        const closestX = Math.max(wallX, Math.min(x, wallX + wallSize));
+        const closestY = Math.max(wallY, Math.min(y, wallY + wallSize));
+        
+        // 计算距离
+        const distanceX = x - closestX;
+        const distanceY = y - closestY;
+        const distance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+        
+        // 如果距离小于小球半径，则发生碰撞
+        if (distance < gameState.ball.radius) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    // 检查是否到达终点
+    function checkGoal() {
+      const goalX = (gameState.maze.goal.x + 0.5) * gameState.maze.cellSize;
+      const goalY = (gameState.maze.goal.y + 0.5) * gameState.maze.cellSize;
+      
+      const dx = gameState.ball.x - goalX;
+      const dy = gameState.ball.y - goalY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance < gameState.ball.radius) {
+        // 到达终点
+        levelComplete();
+      }
+    }
+    
+    // 关卡完成
+    function levelComplete() {
+      gameState.running = false;
+      
+      // 计算星级
+      const level = levels[gameState.level - 1];
+      const stars = calculateStars(gameState.elapsedTime, level.parTime);
+      
+      // 更新完成界面
+      document.getElementById('completion-time').textContent = `时间: ${formatTime(gameState.elapsedTime)}`;
+      document.querySelector('.stars').textContent = '★'.repeat(stars);
+      
+      // 显示完成界面
+      document.getElementById('level-complete').style.display = 'block';
+      
+      showNotification('关卡完成！', { type: 'success' });
+    }
+    
+    // 计算星级
+    function calculateStars(time, parTime) {
+      if (time <= parTime * 0.7) {
+        return 3; // 优秀
+      } else if (time <= parTime) {
+        return 2; // 良好
+      } else {
+        return 1; // 完成
+      }
+    }
+    
+    // 格式化时间
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    // 下一关
+    function nextLevel() {
+      if (gameState.level < gameState.maxLevel) {
+        loadLevel(gameState.level + 1);
+        document.getElementById('level-complete').style.display = 'none';
+        gameState.running = true;
+        gameState.lastTime = performance.now();
+        showNotification(`关卡 ${gameState.level}`, { type: 'info' });
+      } else {
+        // 所有关卡完成
+        showNotification('恭喜！您已完成所有关卡！', { type: 'success' });
+      }
+    }
+    
+    // 重玩当前关卡
+    function replayLevel() {
+      loadLevel(gameState.level);
+      document.getElementById('level-complete').style.display = 'none';
+      gameState.running = true;
+      gameState.lastTime = performance.now();
+      showNotification('重新开始关卡', { type: 'info' });
+    }
+    
+    // 渲染游戏
+    function render() {
+      const ctx = gameState.ctx;
+      const canvas = gameState.canvas;
+      
+      // 清空画布
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // 计算迷宫在画布中的位置（居中）
+      const offsetX = (canvas.width - gameState.maze.width) / 2;
+      const offsetY = (canvas.height - gameState.maze.height) / 2;
+      
+      // 绘制背景
+      ctx.fillStyle = '#87CEEB'; // 天蓝色背景
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // 绘制迷宫
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      
+      // 绘制墙壁
+      ctx.fillStyle = '#2196F3'; // 蓝色墙壁
+      for (const wall of gameState.maze.walls) {
+        ctx.fillRect(
+          wall.x * gameState.maze.cellSize,
+          wall.y * gameState.maze.cellSize,
+          gameState.maze.cellSize,
+          gameState.maze.cellSize
+        );
+      }
+      
+      // 绘制起点
+      ctx.fillStyle = '#4CAF50'; // 绿色起点
+      ctx.beginPath();
+      ctx.arc(
+        (gameState.maze.start.x + 0.5) * gameState.maze.cellSize,
+        (gameState.maze.start.y + 0.5) * gameState.maze.cellSize,
+        gameState.maze.cellSize * 0.3,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      
+      // 绘制终点
+      ctx.fillStyle = '#FF5722'; // 橙色终点
+      ctx.beginPath();
+      ctx.arc(
+        (gameState.maze.goal.x + 0.5) * gameState.maze.cellSize,
+        (gameState.maze.goal.y + 0.5) * gameState.maze.cellSize,
+        gameState.maze.cellSize * 0.3,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      
+      // 绘制小球
+      ctx.fillStyle = gameState.ball.color;
+      ctx.beginPath();
+      ctx.arc(
+        gameState.ball.x,
+        gameState.ball.y,
+        gameState.ball.radius,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      
+      // 添加小球的光泽效果
+      const gradient = ctx.createRadialGradient(
+        gameState.ball.x - gameState.ball.radius * 0.3,
+        gameState.ball.y - gameState.ball.radius * 0.3,
+        gameState.ball.radius * 0.1,
+        gameState.ball.x,
+        gameState.ball.y,
+        gameState.ball.radius
+      );
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+      gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(
+        gameState.ball.x,
+        gameState.ball.y,
+        gameState.ball.radius,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      
+      ctx.restore();
+      
+      // 绘制计时器
+      ctx.fillStyle = 'white';
+      ctx.font = '20px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`时间: ${formatTime(gameState.elapsedTime)}`, canvas.width / 2, 30);
+      
+      // 绘制关卡信息
+      ctx.fillText(`关卡 ${gameState.level}/${gameState.maxLevel}`, canvas.width / 2, 60);
+    }
+    
+    // 更新调试信息
+    function updateDebugInfo() {
+      const debugInfo = document.getElementById('debug-info');
+      
+      const orientationInfo = gameState.sensors.orientation ? 
+        `Beta: ${gameState.sensors.orientation.beta.toFixed(2)}, Gamma: ${gameState.sensors.orientation.gamma.toFixed(2)}` : 
+        '未获取';
+      
+      const gyroInfo = gameState.sensors.gyro ? 
+        `X: ${gameState.sensors.gyro.x.toFixed(2)}, Y: ${gameState.sensors.gyro.y.toFixed(2)}, Z: ${gameState.sensors.gyro.z.toFixed(2)}` : 
+        '未获取';
+      
+      const calibrationInfo = gameState.calibration ? 
+        `Beta: ${gameState.calibration.beta.toFixed(2)}, Gamma: ${gameState.calibration.gamma.toFixed(2)}` : 
+        '未校准';
+      
+      debugInfo.innerHTML = `
+        <div><strong>调试信息</strong></div>
+        <div>FPS: ${(1000 / (performance.now() - gameState.lastTime)).toFixed(1)}</div>
+        <div>小球位置: (${gameState.ball.x.toFixed(1)}, ${gameState.ball.y.toFixed(1)})</div>
+        <div>小球速度: (${gameState.ball.velocityX.toFixed(2)}, ${gameState.ball.velocityY.toFixed(2)})</div>
+        <div>设备方向: ${orientationInfo}</div>
+        <div>陀螺仪: ${gyroInfo}</div>
+        <div>校准值: ${calibrationInfo}</div>
+        <div>时间: ${formatTime(gameState.elapsedTime)}</div>
+      `;
+    }
+    
+    // 显示通知
+    function showNotification(message, options = {}) {
+      const defaults = {
+        duration: 3000,
+        type: 'info'
+      };
+      
+      const settings = { ...defaults, ...options };
+      
+      // 创建通知元素
+      const notification = document.createElement('div');
+      notification.className = `notification ${settings.type}`;
+      notification.textContent = message;
+      
+      // 添加到容器
+      document.body.appendChild(notification);
+      
+      // 显示动画
+      setTimeout(() => {
+        notification.classList.add('show');
+      }, 10);
+      
+      // 自动隐藏
+      setTimeout(() => {
+        notification.classList.remove('show');
+        
+        // 移除元素
+        setTimeout(() => {
+          notification.parentNode.removeChild(notification);
+        }, 300);
+      }, settings.duration);
+    }
+    
+    // 页面加载完成后初始化游戏
+    window.addEventListener('load', initGame);
+  </script>
+</body>
+</html>

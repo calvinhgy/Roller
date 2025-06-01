@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Roller 2D - 陀螺仪权限</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+      text-align: center;
+    }
+    
+    h1 {
+      margin-bottom: 20px;
+    }
+    
+    .container {
+      max-width: 600px;
+      padding: 20px;
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    button {
+      padding: 15px 30px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 18px;
+      margin: 20px 0;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    #status {
+      margin: 20px 0;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    
+    .success {
+      background-color: #dff0d8;
+      color: #3c763d;
+    }
+    
+    .error {
+      background-color: #f2dede;
+      color: #a94442;
+    }
+    
+    .info {
+      background-color: #d9edf7;
+      color: #31708f;
+    }
+    
+    .warning {
+      background-color: #fcf8e3;
+      color: #8a6d3b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Roller 2D - 陀螺仪权限</h1>
+    
+    <p>为了使游戏正常工作，我们需要访问您设备的陀螺仪传感器。</p>
+    <p>请点击下方按钮授予权限。</p>
+    
+    <div id="https-warning" class="warning" style="display: none;">
+      <strong>注意：</strong> 陀螺仪传感器需要HTTPS连接才能正常工作。
+      当前连接不是HTTPS，可能无法获取权限。
+    </div>
+    
+    <button id="request-permission">授予陀螺仪权限</button>
+    
+    <div id="status" class="info">等待请求权限...</div>
+    
+    <div id="sensor-data">
+      <h3>陀螺仪数据</h3>
+      <p>X轴旋转速率: <span id="rotation-rate-x">0</span>°/s</p>
+      <p>Y轴旋转速率: <span id="rotation-rate-y">0</span>°/s</p>
+      <p>Z轴旋转速率: <span id="rotation-rate-z">0</span>°/s</p>
+      
+      <h3>设备方向</h3>
+      <p>Alpha (绕Z轴): <span id="alpha">0</span>°</p>
+      <p>Beta (前后倾斜): <span id="beta">0</span>°</p>
+      <p>Gamma (左右倾斜): <span id="gamma">0</span>°</p>
+    </div>
+    
+    <p>权限授予后，请点击下方按钮进入游戏：</p>
+    <button id="start-game" disabled>进入游戏</button>
+  </div>
+
+  <script>
+    // 状态元素
+    const statusElement = document.getElementById('status');
+    const httpsWarning = document.getElementById('https-warning');
+    const alphaElement = document.getElementById('alpha');
+    const betaElement = document.getElementById('beta');
+    const gammaElement = document.getElementById('gamma');
+    const rotationRateXElement = document.getElementById('rotation-rate-x');
+    const rotationRateYElement = document.getElementById('rotation-rate-y');
+    const rotationRateZElement = document.getElementById('rotation-rate-z');
+    const requestButton = document.getElementById('request-permission');
+    const startGameButton = document.getElementById('start-game');
+    
+    // 权限状态
+    let permissionGranted = false;
+    
+    // 检查是否是HTTPS连接
+    if (window.location.protocol !== 'https:') {
+      httpsWarning.style.display = 'block';
+    }
+    
+    // 请求权限按钮点击事件
+    requestButton.addEventListener('click', requestPermission);
+    
+    // 进入游戏按钮点击事件
+    startGameButton.addEventListener('click', () => {
+      window.location.href = 'roller-2d-gyro.html?permission=granted';
+    });
+    
+    // 请求设备运动权限（包含陀螺仪）
+    async function requestPermission() {
+      updateStatus('正在请求陀螺仪权限...', 'info');
+      
+      try {
+        // 检查是否支持权限API
+        if (typeof DeviceMotionEvent !== 'undefined' && 
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+          
+          // iOS 13+ 需要请求权限
+          const response = await DeviceMotionEvent.requestPermission();
+          
+          if (response === 'granted') {
+            permissionGranted = true;
+            updateStatus('陀螺仪权限已授予！现在可以进入游戏。', 'success');
+            startListeningSensors();
+            startGameButton.disabled = false;
+          } else {
+            updateStatus('陀螺仪权限被拒绝。游戏需要陀螺仪才能正常工作。', 'error');
+          }
+        } else {
+          // 其他设备不需要显式请求权限
+          permissionGranted = true;
+          updateStatus('此设备不需要显式请求陀螺仪权限。可以进入游戏。', 'success');
+          startListeningSensors();
+          startGameButton.disabled = false;
+        }
+      } catch (error) {
+        console.error('请求权限时出错:', error);
+        
+        // 检查是否是HTTPS问题
+        if (window.location.protocol !== 'https:') {
+          updateStatus('请求权限失败: 陀螺仪传感器需要HTTPS连接。请使用HTTPS访问此页面。', 'error');
+        } else {
+          updateStatus('请求权限时出错: ' + error.message, 'error');
+        }
+      }
+    }
+    
+    // 开始监听传感器
+    function startListeningSensors() {
+      // 监听设备方向
+      window.addEventListener('deviceorientation', (event) => {
+        alphaElement.textContent = event.alpha ? event.alpha.toFixed(1) : 'N/A';
+        betaElement.textContent = event.beta ? event.beta.toFixed(1) : 'N/A';
+        gammaElement.textContent = event.gamma ? event.gamma.toFixed(1) : 'N/A';
+      });
+      
+      // 监听设备运动（包含陀螺仪数据）
+      window.addEventListener('devicemotion', (event) => {
+        if (event.rotationRate) {
+          rotationRateXElement.textContent = event.rotationRate.alpha ? event.rotationRate.alpha.toFixed(1) : 'N/A';
+          rotationRateYElement.textContent = event.rotationRate.beta ? event.rotationRate.beta.toFixed(1) : 'N/A';
+          rotationRateZElement.textContent = event.rotationRate.gamma ? event.rotationRate.gamma.toFixed(1) : 'N/A';
+        }
+      });
+    }
+    
+    // 更新状态显示
+    function updateStatus(message, type) {
+      statusElement.textContent = message;
+      statusElement.className = type;
+    }
+    
+    // 检查URL参数，看是否已经授予权限
+    function checkUrlParams() {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('check') === 'true') {
+        // 自动尝试请求权限
+        setTimeout(requestPermission, 1000);
+      }
+    }
+    
+    // 页面加载完成后检查
+    window.addEventListener('load', checkUrlParams);
+  </script>
+</body>
+</html>
