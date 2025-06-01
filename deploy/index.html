@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+  <title>Roller - 3D滚珠迷宫游戏</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <div id="loading-screen" class="screen">
+      <div class="loader"></div>
+      <div class="loading-text">加载中...</div>
+    </div>
+    
+    <div id="main-menu" class="screen hidden">
+      <h1 class="game-title">Roller</h1>
+      <div class="menu-buttons">
+        <button id="start-game" class="btn btn-primary">开始游戏</button>
+        <button id="level-select" class="btn">选择关卡</button>
+        <button id="settings" class="btn">设置</button>
+        <button id="about" class="btn">关于</button>
+      </div>
+    </div>
+    
+    <div id="level-select-screen" class="screen hidden">
+      <h2>选择关卡</h2>
+      <div id="levels-grid" class="levels-grid">
+        <!-- 关卡将通过JavaScript动态生成 -->
+      </div>
+      <button id="back-to-menu" class="btn">返回</button>
+    </div>
+    
+    <div id="game-screen" class="screen hidden">
+      <div id="game-ui">
+        <div id="timer">00:00</div>
+        <button id="pause" class="btn-icon">⏸️</button>
+        <button id="reset" class="btn-icon">🔄</button>
+        <button id="calibrate" class="btn-icon">📐</button>
+      </div>
+      <div id="game-canvas-container"></div>
+    </div>
+    
+    <div id="pause-menu" class="screen hidden">
+      <h2>游戏暂停</h2>
+      <div class="menu-buttons">
+        <button id="resume" class="btn btn-primary">继续游戏</button>
+        <button id="restart" class="btn">重新开始</button>
+        <button id="pause-settings" class="btn">设置</button>
+        <button id="exit-to-menu" class="btn">返回主菜单</button>
+      </div>
+    </div>
+    
+    <div id="level-complete" class="screen hidden">
+      <h2>关卡完成！</h2>
+      <div class="stats">
+        <div id="completion-time">时间: 00:00</div>
+        <div id="stars" class="stars">
+          <span class="star">★</span>
+          <span class="star">★</span>
+          <span class="star">★</span>
+        </div>
+      </div>
+      <div class="menu-buttons">
+        <button id="next-level" class="btn btn-primary">下一关</button>
+        <button id="replay-level" class="btn">重玩</button>
+        <button id="complete-to-menu" class="btn">关卡选择</button>
+      </div>
+    </div>
+    
+    <div id="settings-screen" class="screen hidden">
+      <h2>设置</h2>
+      <div class="settings-container">
+        <div class="setting">
+          <label for="music-volume">音乐音量</label>
+          <input type="range" id="music-volume" min="0" max="100" value="80">
+        </div>
+        <div class="setting">
+          <label for="sfx-volume">音效音量</label>
+          <input type="range" id="sfx-volume" min="0" max="100" value="100">
+        </div>
+        <div class="setting">
+          <label for="sensitivity">控制灵敏度</label>
+          <select id="sensitivity">
+            <option value="low">低</option>
+            <option value="medium" selected>中</option>
+            <option value="high">高</option>
+          </select>
+        </div>
+        <div class="setting">
+          <label for="quality">图形质量</label>
+          <select id="quality">
+            <option value="low">低</option>
+            <option value="medium" selected>中</option>
+            <option value="high">高</option>
+          </select>
+        </div>
+        <div class="setting checkbox">
+          <input type="checkbox" id="touch-controls">
+          <label for="touch-controls">启用触摸控制</label>
+        </div>
+      </div>
+      <div class="menu-buttons">
+        <button id="save-settings" class="btn btn-primary">保存</button>
+        <button id="settings-to-menu" class="btn">返回</button>
+      </div>
+    </div>
+    
+    <div id="about-screen" class="screen hidden">
+      <h2>关于 Roller</h2>
+      <div class="about-content">
+        <p>Roller是一款3D滚珠迷宫游戏，利用iPhone的倾斜角度来控制小球在迷宫中的滚动。</p>
+        <p>版本: 1.0.0</p>
+        <p>开发者: Your Name</p>
+      </div>
+      <button id="about-to-menu" class="btn">返回</button>
+    </div>
+    
+    <div id="permission-request" class="screen hidden">
+      <h2>需要权限</h2>
+      <p>Roller需要访问设备方向传感器来控制游戏。请点击下方按钮授予权限。</p>
+      <button id="request-permission" class="btn btn-primary">授予权限</button>
+      <p class="small-text">如果您拒绝权限，游戏将使用触摸控制作为替代。</p>
+    </div>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.min.js"></script>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
