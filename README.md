@@ -2,6 +2,8 @@
 
 Roller是一款专为iPhone用户设计的3D滚珠游戏，利用设备的倾斜角度来控制小球在迷宫中的滚动。游戏基于Web技术开发，可在iPhone自带的Safari浏览器中直接运行，无需下载安装。
 
+![Roller游戏截图](https://via.placeholder.com/800x400?text=Roller+3D%E6%BB%9A%E7%8F%A0%E6%B8%B8%E6%88%8F)
+
 ## 项目概述
 
 Roller游戏让玩家通过倾斜iPhone设备来控制小球在3D迷宫中的移动，目标是将小球成功引导至终点。游戏具有真实的物理效果、精美的3D图形和流畅的控制体验。
@@ -18,7 +20,7 @@ Roller游戏让玩家通过倾斜iPhone设备来控制小球在3D迷宫中的移
 ## 技术栈
 
 - **3D渲染**：Three.js
-- **物理引擎**：Cannon.js
+- **物理引擎**：Cannon-es
 - **构建工具**：Vite
 - **编程语言**：JavaScript (ES6+)
 
@@ -44,6 +46,10 @@ roller/
 ├── tests/                  # 测试文件
 └── README.md               # 项目说明
 ```
+
+## 在线演示
+
+[在线体验Roller游戏](https://your-demo-url.com)
 
 ## 开发指南
 
@@ -73,6 +79,11 @@ roller/
 ### 开发工作流
 
 项目采用Prompt Driven Development (PDD)方法论，详细的开发指南请参考 `docs/development/pdd.md`。
+
+## 游戏截图
+
+![游戏截图1](https://via.placeholder.com/400x200?text=游戏截图1)
+![游戏截图2](https://via.placeholder.com/400x200?text=游戏截图2)
 
 ## 测试
 

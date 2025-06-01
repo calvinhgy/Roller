@@ -332,6 +332,23 @@ export class Level {
       angularDamping: 0.2 // 角阻尼
     });
     
+    // 添加碰撞监听
+    this.physicsWorld.addCollisionListener((bodyA, bodyB) => {
+      // 检查是否是小球碰撞
+      if ((bodyA === ballBody || bodyB === ballBody) && 
+          window.game && window.game.audioManager) {
+        // 获取碰撞速度
+        const relativeVelocity = bodyA.velocity.distanceTo(bodyB.velocity);
+        
+        // 只有当碰撞速度足够大时才播放音效
+        if (relativeVelocity > 1) {
+          // 根据碰撞强度调整音量
+          const volume = Math.min(relativeVelocity / 10, 1) * 0.5;
+          window.game.audioManager.play('collision', { volume });
+        }
+      }
+    });
+    
     this.physics.ball = ballBody;
   }
   
@@ -424,6 +441,20 @@ export class Level {
     if (this.objects.ball && this.physics.ball) {
       this.objects.ball.position.copy(this.physics.ball.position);
       this.objects.ball.quaternion.copy(this.physics.ball.quaternion);
+      
+      // 检查小球是否在移动，如果是则播放滚动音效
+      const velocity = this.physics.ball.velocity;
+      const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+      
+      if (speed > 0.5 && window.game && window.game.audioManager) {
+        if (!this.isRollingSoundPlaying) {
+          window.game.audioManager.play('roll', { volume: Math.min(speed / 10, 1) * 0.3 });
+          this.isRollingSoundPlaying = true;
+        }
+      } else if (this.isRollingSoundPlaying && window.game && window.game.audioManager) {
+        window.game.audioManager.stop('roll');
+        this.isRollingSoundPlaying = false;
+      }
     }
     
     // 更新相机

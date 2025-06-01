@@ -7,6 +7,8 @@ import { MotionController } from '../physics/MotionSensor.js';
 import { LevelManager } from '../levels/LevelManager.js';
 import { UIManager } from '../ui/UIManager.js';
 import { EventBus } from '../utils/EventBus.js';
+import { AudioManager } from '../utils/AudioManager.js';
+import { LevelGenerator } from '../utils/LevelGenerator.js';
 
 /**
  * 游戏主类，负责协调所有游戏系统
@@ -50,6 +52,8 @@ export class Game {
     this.motionController = null;
     this.levelManager = null;
     this.uiManager = null;
+    this.audioManager = null;
+    this.levelGenerator = null;
     this.gameLoop = null;
   }
   
@@ -89,6 +93,16 @@ export class Game {
       // 初始化UI管理器
       this.uiManager = new UIManager(this.container);
       
+      // 初始化音频管理器
+      this.audioManager = new AudioManager({
+        musicVolume: this.settings.musicVolume,
+        sfxVolume: this.settings.sfxVolume,
+        muted: false
+      });
+      
+      // 初始化关卡生成器
+      this.levelGenerator = new LevelGenerator();
+      
       // 创建游戏循环
       this.gameLoop = new GameLoop(
         this.update.bind(this),
@@ -103,6 +117,9 @@ export class Game {
       
       // 加载全局资源
       await this.loadGlobalResources();
+      
+      // 预加载音效
+      await this.audioManager.preloadCommonSounds();
       
       console.log('游戏初始化完成');
       return true;
@@ -160,6 +177,9 @@ export class Game {
       
       // 触发游戏开始事件
       this.eventBus.publish('game:start', { levelId });
+      
+      // 播放背景音乐
+      this.audioManager.playMusic('background');
       
       return true;
     } catch (error) {
@@ -272,6 +292,9 @@ export class Game {
     
     // 暂停游戏
     this.pause();
+    
+    // 播放胜利音效
+    this.audioManager.play('win');
     
     // 计算星级
     const stats = this.currentLevel.getCompletionStats();

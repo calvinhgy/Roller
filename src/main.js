@@ -13,6 +13,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     storage: storage
   });
   
+  // 将游戏实例添加到全局，以便其他模块访问
+  window.game = game;
+  
   try {
     // 显示加载屏幕
     showScreen('loading-screen');
