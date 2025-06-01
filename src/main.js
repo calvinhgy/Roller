@@ -50,6 +50,7 @@ function setupEventListeners(game) {
     showScreen('level-select-screen');
   });
   
+  // 设置UI事件监听器
   document.getElementById('settings').addEventListener('click', () => {
     hideScreen('main-menu');
     loadSettings(game);
@@ -60,6 +61,17 @@ function setupEventListeners(game) {
     hideScreen('main-menu');
     showScreen('about-screen');
   });
+  
+  // 添加调试模式切换
+  if (game.debug) {
+    const debugButton = document.createElement('button');
+    debugButton.className = 'btn';
+    debugButton.textContent = '调试面板';
+    debugButton.addEventListener('click', () => {
+      game.debugPanel.toggle();
+    });
+    document.querySelector('.menu-buttons').appendChild(debugButton);
+  }
   
   // 关卡选择屏幕
   document.getElementById('back-to-menu').addEventListener('click', () => {

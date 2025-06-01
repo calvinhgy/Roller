@@ -9,6 +9,9 @@ import { UIManager } from '../ui/UIManager.js';
 import { EventBus } from '../utils/EventBus.js';
 import { AudioManager } from '../utils/AudioManager.js';
 import { LevelGenerator } from '../utils/LevelGenerator.js';
+import { ParticleSystem } from '../utils/ParticleSystem.js';
+import { DebugPanel } from '../utils/DebugPanel.js';
+import { TutorialManager } from '../ui/TutorialManager.js';
 
 /**
  * 游戏主类，负责协调所有游戏系统
@@ -54,6 +57,9 @@ export class Game {
     this.uiManager = null;
     this.audioManager = null;
     this.levelGenerator = null;
+    this.particleSystem = null;
+    this.debugPanel = null;
+    this.tutorialManager = null;
     this.gameLoop = null;
   }
   
@@ -102,6 +108,43 @@ export class Game {
       
       // 初始化关卡生成器
       this.levelGenerator = new LevelGenerator();
+      
+      // 初始化调试面板
+      this.debugPanel = new DebugPanel(this.container, {
+        enabled: this.debug,
+        showFPS: true,
+        showMemory: true,
+        showPhysics: true,
+        showPosition: true
+      });
+      
+      // 初始化教程管理器
+      this.tutorialManager = new TutorialManager(this.container, this.storage);
+      this.tutorialManager.init();
+      
+      // 定义教程步骤
+      this.tutorialManager.defineSteps([
+        {
+          message: "欢迎来到Roller游戏！在这个游戏中，你需要通过倾斜设备来控制小球移动，到达迷宫的终点。",
+          image: "/assets/tutorial/intro.png"
+        },
+        {
+          message: "倾斜你的设备来控制小球的移动方向。向前倾斜使小球向前滚动，向左倾斜使小球向左滚动，以此类推。",
+          image: "/assets/tutorial/tilt.png"
+        },
+        {
+          message: "绿色圆圈是起点，红色圆圈是终点。你的目标是将小球从起点滚动到终点。",
+          image: "/assets/tutorial/goal.png"
+        },
+        {
+          message: "注意不要让小球掉出边界，否则小球会回到起点。",
+          image: "/assets/tutorial/boundary.png"
+        },
+        {
+          message: "完成关卡后，你将获得1-3颗星星，取决于你完成的时间。现在开始你的挑战吧！",
+          image: "/assets/tutorial/stars.png"
+        }
+      ]);
       
       // 创建游戏循环
       this.gameLoop = new GameLoop(
@@ -167,6 +210,9 @@ export class Game {
         }
       });
       
+      // 初始化粒子系统
+      this.particleSystem = new ParticleSystem(this.sceneManager.getScene('game'));
+      
       // 开始监听设备方向
       this.motionController.start();
       
@@ -180,6 +226,22 @@ export class Game {
       
       // 播放背景音乐
       this.audioManager.playMusic('background');
+      
+      // 如果是第一关，显示教程
+      if (parseInt(levelId) === 1) {
+        this.tutorialManager.isCompleted().then(completed => {
+          if (!completed) {
+            // 暂停游戏
+            this.pause();
+            
+            // 显示教程
+            this.tutorialManager.show(() => {
+              // 教程完成后恢复游戏
+              this.resume();
+            });
+          }
+        });
+      }
       
       return true;
     } catch (error) {
@@ -266,6 +328,20 @@ export class Game {
         this.handleLevelComplete();
       }
     }
+    
+    // 更新粒子系统
+    if (this.particleSystem) {
+      this.particleSystem.update(deltaTime);
+    }
+    
+    // 更新调试面板
+    if (this.debugPanel && this.debug) {
+      const ballPosition = this.currentLevel ? this.currentLevel.getBall().position : null;
+      this.debugPanel.update({
+        physicsWorld: this.physicsWorld,
+        position: ballPosition
+      });
+    }
   }
   
   /**
@@ -295,6 +371,26 @@ export class Game {
     
     // 播放胜利音效
     this.audioManager.play('win');
+    
+    // 创建胜利粒子效果
+    if (this.particleSystem && this.currentLevel.objects.ball) {
+      const ballPosition = this.currentLevel.objects.ball.position;
+      
+      // 创建五彩纸屑效果
+      this.particleSystem.createEffect('confetti', {
+        position: new THREE.Vector3(ballPosition.x, ballPosition.y + 2, ballPosition.z),
+        count: 100,
+        lifetime: 3
+      });
+      
+      // 创建闪光效果
+      this.particleSystem.createEffect('sparkle', {
+        position: new THREE.Vector3(ballPosition.x, ballPosition.y, ballPosition.z),
+        count: 30,
+        color: 0xFFD700, // 金色
+        lifetime: 1.5
+      });
+    }
     
     // 计算星级
     const stats = this.currentLevel.getCompletionStats();
